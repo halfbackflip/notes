@@ -13,8 +13,7 @@ Git follows a 3 tree architecture.
 - Staging Index: Items prepared for commit to the repo
 - Repo: Destination repository for items going to the repo.
 
-![](img/three_tree.png)
-
+![three tree architecture](./GIT/img/three_tree.png)
 ___
 
 ## Git CLI Commands
