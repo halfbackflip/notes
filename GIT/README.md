@@ -1,4 +1,6 @@
-# Definition
+# GIT
+
+## Definition
 
 Git is a system to track changes and version control. It was pioneered by Linus Torvald in 2005. 
 Before Git, other version control systems were used such as SCCS, RCS and CVS. Unlike previous systems, 
@@ -48,6 +50,6 @@ ___
 |`git clone <url>`| Clones a project from github |
 |`git branch -a`| lists all branches associated with a project|
 |`git remote add origin <URL>`| Adding a remote location
-|`git push -u origin master` | Push, i.e. upload the comitted files
+|`git push -u origin main` | Push, i.e. upload the comitted files to the main branch
 |`gh repo clone <repo>` | Clone a repo
 |`git clone https://github.com/halfbackflip/notes.git` | Clone a repo
