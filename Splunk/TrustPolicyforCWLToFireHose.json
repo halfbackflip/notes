@@ -1,0 +1,7 @@
+{
+    "Statement": {
+      "Effect": "Allow",
+      "Principal": { "Service": "logs.ap-southeast-2.amazonaws.com" },
+      "Action": "sts:AssumeRole"
+    }
+  }
