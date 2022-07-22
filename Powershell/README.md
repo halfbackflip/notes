@@ -28,6 +28,64 @@ Providers provide access to objects that would normally not be easily accessible
 An object is a structured collection of information with certain properties, methods, aliases, etc. 
 To get the properties of a given object, run the Get-Member command, for example, `Get-ChildItem | Get-Member`
 [https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_properties?view=powershell-7.2](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_properties?view=powershell-7.2)
+
+## Pipeline Parameter Binding
+The process by which powershell will determine which parameter of a command will accept the output of a preceding command in a pipeline.
+There are two types of pipeline parameter binding:
+| **Name** | **Description** |
+| --------------|-------------------|
+| ByValue | Attempts to see if any paramter of the second command can accept the incoming object as input. The first method powershell tries. |
+| ByPropertyName | Powershell looks for property names which match parameter names. This is the second method powershell will try if ByValue fails. |
+[https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_pipelines?view=powershell-7.2](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_pipelines?view=powershell-7.2)
+
+## Parenthetical Commands
+Powershell runs any command in parantheses first. This will work as long as the parathentical command generates the type of object the preceding parameter expects.
+
+For example:
+```
+Get-Command -Module (Get-Content ./modules.txt)
+```
+
+## Formatting 
+Powershell has several formatting options available.
+| **Name** | **Description** | **Example Command** |
+| --------------|-------------------|-------------------| 
+| Format-Table | Creates a table-like output. Use properties to select column headers. | Get-Process \| Format-Table -Property ID,Name,Responding | 
+| Format-List | Generates series of horizontal rows. Use properties to select included rows. | Get-Process \| Format-List -Property ID,Name,Responding | 
+| Format-Wide | Displays a wider, multicolum list. Can only display the values of a single property. The numbe of columns to display can be selected. | Get-Process \| Format-Wide name -col 4 | 
+| Out-GridView | Generates a GUI viewer. | Get-Process \| Out-GridView |
+
+## Filtering
+When filtering command output, always filter early, as close to the beginning command as possible. 
+Filtering can be performed using comparrison operators:
+| **Name** | **Description** |
+| --------------|-------------------|
+| -eq | equal |
+| -ne | not equal |
+| -ge | greater than or equal to |
+| -le | less than or equal to |
+| -gt | greater than |
+| -lt | less than |
+| -eq | equal |
+| -or | logical or |
+| -and | logical and |
+| -and | logical not |
+| -like | checks if two expressions are similar |
+| -like | checks if two expressions are not similar |
+| -match | compares a string with a regex |
+
+* The command `get-help about_Comparison_Operators` will display the helpfile for all comparrison operators.
+** String comparisons, you can use a case-sensitive operators such as: -ceq, -cne, -cgt, -clt, -cge, -cle.
+
+## Powershell Remoting
+
+Method to run powershell commands on remote computers. Powershell on windows uses a communications protocol called Web Services for Management (WSMan). WSMan uses entirely over HTTP or HTTPS (HTTP by default). WsMan exists as a background service which is disabled by default, Windows Remote Management (WinRM). Remoting on Linux and MacOS devices can be performed over Secure Shell, SSH. 
+
+Points to keep in mind:
+- In a remoting session, Powershell serializes the output objects into XML
+- Then deserializes them back into XML on the recieving endpoint
+- The recieved XML represents point-in-time snapshots, not live actual data
+
 ___
 
 ## Powershell Commands
@@ -76,3 +134,11 @@ ___
 |`Get-ChildItem \| Select-Object -Property Name,CreationTime`| Display the names and creation date of files in the current working directory |
 |`Get-ChildItem \| Select-Object -Property Name,CreationTime,LastWriteTime \| Sort-Object LastWriteTime \| Export-Csv files.csv`| Export to csv the Name,CreationTime,LastWriteTime of files in the current working directory |
 |`Get-ChildItem \| Select-Object -Property Name,CreationTime,LastWriteTime \| Sort-Object LastWriteTime \| Out-file files.html`| Export to html the Name,CreationTime,LastWriteTime of files in the current working directory |
+| `Get-Process | Format-Table Name,ID,@{l='VirtualMB';e={$_.vm/1MB}},@{l='PhysicalMB';e={$_.workingset/1MB}}`| Run get process and includes custom formatting based on calculated values for Virtual MB and Physical MB
+|`Get-Process \| Format-Table Name, CPU, Description, Company -GroupBy Company`| Runs get process, then groups the output results by company name |
+|`Get-Process \| Where-Object -FilterScript {$_.WorkingSet -gt 100MB}`| Runs get process, then filters where the working process is greater than 100mb |
+|`Get-Process \| Where-Object { $_.Name -notlike 'pwsh*' } \|Sort-Object VM -Descending`| Runs get proces, then filters for all objects which are not powershell |
+| `Enter-PSSession` | Start a new remote session |
+| `Exit-PSSession` | Exit a remote session |
+| `Invoke-Command` | Used to run multiple commands at once |
+|`Invoke-Command –scriptblock {Get-Process } -HostName Server01,Server02 -UserName <username> `| Runs get-process to retrieve a list of processes running from multiple remote computers. |
