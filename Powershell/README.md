@@ -32,10 +32,9 @@ To get the properties of a given object, run the Get-Member command, for example
 ## Pipeline Parameter Binding
 The process by which powershell will determine which parameter of a command will accept the output of a preceding command in a pipeline.
 There are two types of pipeline parameter binding:
-| **Name** | **Description** |
-| --------------|-------------------|
-| ByValue | Attempts to see if any paramter of the second command can accept the incoming object as input. The first method powershell tries. |
-| ByPropertyName | Powershell looks for property names which match parameter names. This is the second method powershell will try if ByValue fails. |
+1. ByValue: Attempts to see if any paramter of the second command can accept the incoming object as input. The first method powershell tries. 
+2. ByPropertyName: Powershell looks for property names which match parameter names. This is the second method powershell will try if ByValue fails.
+
 [https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_pipelines?view=powershell-7.2](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_pipelines?view=powershell-7.2)
 
 ## Parenthetical Commands
