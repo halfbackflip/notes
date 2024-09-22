@@ -476,7 +476,7 @@ Generally commands won’t generate an exception unless you run them with the St
 | Value | Definition |
 | -------------- |  -------------- |
 | Break | Enter the debugger when an error occurrs or an exception is raised |
-| Contine | (Default) Display the error message and keep on going |
+| Continue | (Default) Display the error message and keep on going |
 | Ignore | Suppress the error message and continue to execute the command.  |
 | Inquire | Display the error message and ask if you want to continue |
 | SilentlyContinue | No effect. Error message isn't displayed. Execution continues without interruption.  |
@@ -605,7 +605,808 @@ The following parameters accept script blocks
 - Remoting and job-related commands, including Invoke-Command and Start-Job, accept script blocks on their -ScriptBlock parameter.
 
 The help file `help about_script_blocks` has further information about this. 
+
+## Toolmaking
+When creating powershell scripts, focus on creating single-task tools. These tools are then activated or controlled by a controller script. 
+Do not create tool that perform multiple tasks or reproduce functionality already avaialble in powershell.
+
+## Naming Conventions
+- Start with a powershell approved verb. Run `Get-Verb` for a list of powershell approved verbs
+- Always use a singular noun, i.e. user not users
+- Prefix the noun with something related to your company or functions. For example `Get-ECorpUser`
+
+## Naming Parameters
+- More important than naming a cmdlet
+- When deciding on a parameter name, focus on the core, native powershell commands. What param name would they use?
+- Core command param examples:
+    * -ComputerName
+    * -FilePath
+    * -PSSession
+- Consistent powershell parameter labelling is imporant as it allows commands to connect in the pipeline.
+- If you need to determine a parameter name is a good selection, run Powershell to see if other commands are using the parameter:
+```
+Get-Command -CommandType Cmdlet -ParameterName ComputerName
+Get-Command -CommandType Cmdlet -ParameterName Computer
+```
+
+## Creating proper output
+- Powershell commands produce objects as output
+- Consider an object as a row in spreadsheet, with each column representing a property
+- Objects are structured data. An object's data can be retrieved by referring to it's property names
+- Objects are output and placed into the powershell pipeline
+- This carries the object ot the next command in the pipeline
+- When the last command has output its objects in the pipeline, it is then handled by the processing system
+- The Formatting system then determines how to display the output 
+- Tools should not focus on formatting output, rather getting the correct objects in the pipeline is key.
+
+## Parameters Revisted
+- The only way a command can accept data, is through its parameters
+- When you design a command, and design its parameters... you decide how a commmand will accept information
+- Each parameter is passed through a pipeline. For example:
+```
+Get-Service | Where Status -eq "Running" | ConvertTo-HTML | Service-File stats.htm
+```
+
+## Pipeline ByValue
+Powershell has a preference to pass entire objects from the pipeline into a command. In order to allow this:
+1. The recieving command must have a parameter that supports accepting pipeline input ByValue
+2. That parameter must be able to accept the incoming object type
+
+Way of showing the help menu in a window
+```
+Help Convertto-html -ShowWindow
+```
+In pipelines, System.Object is the mother type for all other objects. Everything else inherits from this Object type. System objects can accepts pipeline input using the ByValue technique.
+
+## Trace Command
+Command which allows you to view the passing of objects. 
+For example:
+```
+ Trace-Command -Expression { Get-Process | ConvertTo-Html | out-null } -Name ParameterBinding -PSHost
+```
+Specifying named or positional paramters always takes precedence. These items are always binded first. In the debug output, the phrase `No Coercion` indicates powershell was able to output as-is without attempting to convert it to something else. 
+
+## ByPropertyName
+If ByValue parameter binding fails, powershell will look at the objects in the pipeline to see if they have a property with the same name and bind to that parameter. If two commands have matching propety and parameter names, this can be a useful technique. For example:
+```
+Import-CSV Users.csv | New-ADUser
+```
+If "SKIPPED" appears in the debug trace log, this indicates that ByValue did not work, powershell will then attempt ByPropertyName. For example:
+```
+ Trace-Command -Expression { Get-Process -Name o* | Stop-Job }  -PSHost -Name ParameterBinding
+```
+If ByValue and ByPropertyName both fail, then the entire pipeline will fail. The pipeline will throw an error message and fail. 
+
+## Planning Parameters
+- When you start designing tools: only have 1 parameter designed to accept pipeline input by ByValue. 
+- As many parameters as you want can accept input ByPropertyName
+- Determining this plan requires understanding the useage pattern:
+    1. Will your command/tool be accepting pipeline input?
+    2. Will your command/tool be the initial command at the start of the pipeline
+
+## Scripts and Security
+
+### PowerShell's Script Security Goal
+Power shell's security mechanisms are not a boundary, rather they are intended to prevent accidental or unintended execution. Anything an attacker could do in powershell, they could also do without it. Locking down or removing powershell, does not get rid of COM, .NET framework or WMI. These underlying items are still there. For example, a user may not restricted by their execution policy to not be able to click and run scripts. However, if they copy and paste the same script into the shell, it will run at their permission level.
+
+### Execution Policy
+Run the command `Get-ExecutionPolicy` to see the current execution policy. An execution policy can be set with `Set-ExecutionPolicy`
+The command `help about_Execution_Policies` will display details about execution policies
+These policies are intended to prevent accidenal execution only and are not considered a true security measure.
+
+| **Policy** | **Description** |
+| --------------|-------------------|
+| Restricted | Default. Scripts are not executed |
+| AllSigned | Powershell will execute anything signed by a CA |
+| Unrestricted | All scripts will run |
+| RemoteSigned | PowerShell will execute any local script and will execute remote scripts if they’ve been digitally signed by a trusted CA |
+| Bypass | Ignores the configured execution policy. Special settings used primarily by app developers embedding powershell within an app. |
+| Undefined | No policy found. Powershell will move down the scope list to user the first effective policy |
+
+### Execution Scope
+You can view your current scope by running `Get-ExecutionPolicy -List`. 
+Items in the policy scope are set via Group Policy
+The execution policy can be set at one of the following scopes:
+
+1. LocalMachine - Applies to the entire machine. The top level policy, outranks all others. 
+HKLM:\Software\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell
+
+2. CurrentUser - Applies to the current user
+HKCU:\Software\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell
+
+3. Process - Applies to the current powershell session set in the `$env:PSExecutionPolicyPreference` variable
+
+### Default Application
+By default, a .ps1 script is open in notepad, it is not run by powershell
+
+### Recommendations
+Use AllSigned when certs will be used to control script releases.
+AllSigned is useful as a procedure, declaring a script ready for production and useage.
+Not useful as a security measure. A user running a script cannot do anything beyond their current permissions
+
 ___
+
+## Scripting in Powershell
+
+### Comparrison Operators
+Powershell's core comparrison operators are:
+
+| Name | Description |
+| ---- | ---- |  
+| -eq | Equal to |
+| -ne | Not equal to |
+| -gt | Greather than |
+| -ge | Greater than or equal to |
+| -lt | Less than |
+| -le | Less than or equal to |
+
+* If you need a case-sensitive comparison, add a 'c' in front of the name, for example 'ceq' or 'cgt'
+
+### Wildcards
+Common wildcard comparrison can be done with `-like` and `-notlike`. * is used to match zero or more characters while ? is used to make single character comparrisons.
+For example:
+```
+'bill' -eq 'will'
+'bill' -like '*will'
+'don' -notlike 'don*'
+'ron' -like 'r?n'
+'donald' -like 'd?n'
+```
+### In vs Contains
+`-contains` and `-in`  are both used to check an array for a certain value. 
+However, note how the order they appear in is important. 
+For example:
+```
+$array = @("one","two","three")
+$array -contains "one"
+"one" -in $array
+```
+
+### If Constructs
+If is used to make logical decisions in code. At each stage and expression is evaluated and 
+returns true or false. If the expression evaluates to true, the code below will execute. The basic syntax is:
+```
+If (<expression>) {
+    # code
+} ElseIf (<expression>) {
+    # code
+} ElseIf (<expression>) {
+    # code
+} Else {
+
+    # code
+}
+```
+Here is an example of using If to perform an action and stop a process
+```
+$proc = Get-Process -Name "notepad"
+
+If ($proc.cpu -gt 1) {
+    Stop-Process -Name $proc
+}
+```
+You can create a between situation by using gt and lt together with -or. For example:
+```
+If ($proc.vm -gt 4 -or $proc.vm -lt 2) {
+  # take some action
+}
+```
+
+### Foreach
+foreach is designed to take a collection or an array of objects and go through them one at a time. 
+During each turn, the object is placed in a sperate variable to refer to it. 
+```
+ForEach ($item in $collection) {
+    # run code on $item
+}
+```
+
+Best Practice:
+Use ForEach over ForEach-Object in a script. You can name your single item variable, it executes faster and often consumes less memory.
+
+### Limitations
+foreach does not write directly to the pipeline. The below will not work as the pipe is considered empty once the loop completes.
+```
+$numbers = 1..100
+foreach ($n in $numbers) {
+    $n * 3
+} | Out-File num.txt
+```
+Instead, capture the loop in a variable. Then pipe the variable to the outfile. 
+```
+$numbers = 1..100
+$num = foreach ($n in $numbers) {
+    $n * 3
+} 
+$num | Out-File num.txt
+```
+You do not always need to use a looping construct. For example:
+```
+$services = Get-Service -name bits,lanmanserver,spooler
+Foreach ($service in $services) {
+  Restart-service $service -passthru
+}
+```
+Versus this:
+```
+$services = Get-Service -name bits,lanmanserver,spooler
+$services | restart-service -passthru
+```
+
+### Switch
+The Switch construct is used to replace a huge if block which contains multiple ElseIf sections. 
+
+Syntax is:
+```
+switch (<principal>) {
+  <candidate> { <script block> }
+  <candidate> { <script block> }
+  <candidate> { <script block> }
+  default { <script block {
+}
+```
+- The priniciple is a variable with a single value or object. It cannot contain collections or arrays.
+- Each candidate is a boolean or value the principal might contain
+- The script block will execute if the candidate is true
+- The default block executes if nothing matches.
+
+Here is an example:
+```
+$hero = "Batman"
+
+switch -wildcard($hero)
+{
+    "*Joker*"{"Contains Joker"}
+    "*Clayface*"{"Contains Clayface"}
+    "*man*"{"Contains man"}
+    default {"Nada"}
+}
+```
+
+### Do/While
+While executes a specific block of statements. This will execute while some condition is true. There are two basic variations
+
+While: Executes as long as the condition is true.
+```
+While (<condition>) {
+ # code
+}
+```
+
+Do While: Executes as least once then as long as the condition is true.
+```
+Do {
+ # code
+} While (<condition>)
+```
+
+### Break
+The Break keyword exits any construct. 
+Some exceptions:
+- If it is a For, Foreach, While or Switch construct, Break will immediately exit. 
+- In a script, but outside a loop -- Break will exit the entire script.
+- In an IF construct Break will exit whatever contains the If construct. 
+
+Break is useful for aborting an operation. For example if you have a list of computers or IPs you want to ping, go through them one-by-one but stop immediately if one does not responsd. 
+```
+$ips = '8.8.8.8', '9.9.9.9', '192.168.10.1'
+foreach ($ip in $ips) {
+    If (-not (Test-NetConnection $ip)) {
+        Break
+    }
+}
+``` 
+Here is an example of a while loop using break to end an infinite loop. This can be useful for requesting input indefinetly, etc. Be careful with this approach as it best to write loops with a natural end point. If Break is needed, surround it by blank lines and comments to indicate the intention.
+```
+While ($true){
+    $n = Read-Host "Enter a Number"
+    If ($n -eq 0) { break }
+    else { Write-Host 'Enter another: '}
+}
+```
+___
+
+# Script Design
+
+## Design Principles
+Tools do one thing. Do not create your own tool if the functionality already exists in an existing powershell cmdlet.
+Design tools that are testable, as you will need to create automated unit tests for your tools.
+Single purpose tools are easily testable. The fewer functionalities and logic branches the tool has, the easier it will be to use and maintain. 
+
+Single purpose tools require designing the tools to perform pipeline input.
+Write examples and possible use cases of your tool(s) to consider how you will code them. 
+For example, if you had the program `Set-MachineStatus`, the following could be some example use cases:
+```
+Set-MachineStatus
+Get-Content names.txt | Set-MachineStatus
+Get-ADComputer -filter * | Select -Expand Name | Set-MachineStatus
+Get-ADComputer -filter * | Set-MachineStatus
+Set-MachineStatus -ComputerName (Get-Content names.txt)
+```
+Be careful with tool names and parameter names. Tools should always adopt the standard verb-noun pattern in powershell. 
+Only use an approved verb from the list `Get-Verb`. 
+
+Create a short prefix on your command's noun to make the tool distinguishable from other powershell cmdlets.
+
+Parameter names should always follow Powershell Parameters. Whenever you need a parameter, examine how native powershell cmdlets 
+name and use their parameters. For example, if you need a path it will usually be -FilePath or -Path on most native commands.
+
+## Design and context
+Not every business need can be solved with a single tool or command. Sometimes a suite of tools or a module is needed. 
+Always stay focused on the tool/controller design pattern: Tools do one thing. Controllers manage tools. 
+
+There is an approach which states you start tool design by writing the help file. Then code to the help file. 
+TDD is test-drive development, where you write automated tests first to specify how your code should work. 
+
+Always run powershell commands in the shell to practice and experiment with. 
+
+___
+
+# Building a Module
+
+## Start with a function
+Keep your function tightly scoped and self-contained. Functions should perform one function only. 
+General function best practices:
+
+1. Info to be used by the function should only come from parameters which feed into the function.
+Functions should not rely on external variables outside the function itself. 
+
+2. Output from a function should be to the Powershell pipeline only. 
+
+## Designing Input Parameters
+Any info which will need to be fed to the function should be created in parameters.
+- Data types are enclosed in square brackets
+- Common data types include [string],[int],[datetime]
+- Parameters become variables inside the function
+- Seperate sections with commas
+- The [string[]] denotes an array of values.
+
+
+## Creating a script module
+Script modules are supported by Powershell v2 and later. Generally these modules should be stored in a path specified by the PSModulePath environment variable, `$env:psmodulepath`. A script module requires a `.psm1` extention and to be placed in a subfolder here. The subfolder and module name must match. To temporarilyload a module, you will need to manually run `Import-Module` and provide the full path to the module being loaded. The `-Force` parameter will allow you to overwrite any existing versions of the module. Modules can then be removed by running `Remove-Module`
+
+## Advanced Functions
+In order to create an "Advanced Function" add the `[CmdletBinding()]` parameter to the function.
+For example:
+```
+function test {
+    [CmdletBinding()]
+    Param(
+        [string]$ComputerName
+    )
+}
+```
+Adding this will enabled access to common parameters, decorators for parameters and additional help options. The help files `about_CommonParameters` amd `about_Functions_Advanced` provide additional details. 
+
+Some useful common parameters are:
+| **Command** | **Description** |
+| --------------|-------------------|
+|`-Verbose`| Enables useage of Write-Verbose in your function. |
+|`-Debug`| |`-Verbose`| Enables useage of Write-Debug in your function. |
+|`-ErrorAction`| Create custom actions in the event of an error. |
+|`-ErrorVariable`| Specify an error variable to capture errors. |
+|`-InformationAction`| Overrides the global $InformationPreference variable, enabls Write-Information in the function. |
+|`-InformationVariable`| Create a variable for Write-Information to hold info. |
+|`-OutVariable`| Specifies a variable in which PowerShell will place copies of your function's output |
+|`-PipelineVariable`| Specifies a variable for powershell to store a copy of the current pipeline element |
+
+### Parameter Decorators
+Advanced functions allow you to add parameter decorators.
+Parameter dectorators can enable accepting pipeline input by value by using the `ValueFromPipeline=$True` and 
+pipeline input by property using the `ValueFromPipelineByPropertyName=$True` parameter decorator.
+`Mandatory=$True` will make the parameter mandatory. The `[ValidateSet()]` enables input validation. Aliases can also be added. 
+Adding `SupportsShouldProcess=$True` will enable the `-WhatIf` and `-Confirm` parameters for the function. 
+
+For example:
+```
+function test {
+    [CmdletBinding()]
+    Param(
+        [Parameter(ValueFromPipeline=$True, ValueFromPipelineByPropertyName=$True, Mandatory=$True)]
+        [Alias('CN','Hostname','MachineName')]
+        [string]$ComputerName
+    )
+}
+```
+___
+
+# Objects and output
+
+## Splatting
+Splatting allows you to pass parameters using a hash table. The keys need to be parameter names and the values are the corresponding parameter values.The hashtable is then assigned to a variable. For example:
+```
+$params = @{'Name'='example.com'
+            'Server'='1.1.1.1'}
+
+Resolve-DnsName @params
+``` 
+## Object output
+Never use `Write-Host` to create output. `Write-Host` will only draw the output directly on to the screen. That output cannot be fed to the pipeline, maniupulated or re-used. Forllowing the previous example, you can create an object by running `New-Object -TypeName PSObject` like the following:
+```
+$params = @{'Name'='example.com'
+            'Server'='1.1.1.1'}
+
+$dns = Resolve-DnsName @params | Select-Object -Property Name, Type, IPAddress
+
+$props = @{'Name'= $dns.Name
+            'Type'=$dns.Type
+            'IP'=$dns.IPAddress}
+
+$obj = New-Object -TypeName PSObject -Property $props
+```
+
+An alternative to performing this can be done using `[pscustomobject]@{` For example:
+```
+$params = @{'Name'='example.com'
+            'Server'='1.1.1.1'}
+
+$dns = Resolve-DnsName @params | Select-Object -Property Name, Type, IPAddress
+
+$obj = [pscustomobject]@{
+Name = $dns.Name
+Type = $dns.Type
+IP = $dns.IPAddress
+}
+
+```
+Either approach is fine, with `[pscustomobject]@{` being a little newer. 
+Lastly `Add-Member` will allow you to add additional info on to an object after it has been created. For example:
+```
+$params = @{'Name'='example.com'
+            'Server'='1.1.1.1'}
+
+$dns = Resolve-DnsName @params | Select-Object -Property Name, Type, IPAddress
+
+$obj = [pscustomobject]@{
+Name = $dns.Name
+Type = $dns.Type
+IP = $dns.IPAddress
+}
+
+$obj | Add-Member -MemberType NoteProperty `
+            -Name Protocol `
+            -Value 'DNS'
+
+```
+___
+
+# Pipelines
+
+Powershell has 6 channels or pipelines. The sucess pipeline is used to pass commands from object to object.
+This is the pipeline you know. It takes objects and outputs them to the screen. 
+
+All the pipeline types are:
+1. Success
+2. Error
+3. Warning
+4. Verbose
+5. Debug
+6. Information
+
+Each pipeline has a specific method needed to pass information to it, i.e.
+the verbose pipeline displays items in bright yellow text.
+
+There are also several preference variables for each pipeline which control the output. 
+For example, `$VerbosePreference` controls the verbose pipeline.
+
+## Verbose Output
+Verbose output is disabled by default.
+Warning output is enabled. 
+
+Verbose is often used to write explanatory items in the output.
+For example:
+```
+Write-Verbose "Connecting to $computer over $protocol"         1
+        $session = New-CimSession -ComputerName $computer '
+                                  -SessionOption $option
+
+        Write-Verbose "Querying from $computer"
+        $os_params = @{'ClassName'='Win32_OperatingSystem'
+```
+Do not wait until after you have finished scripting to add vervose statements in, add them as you script. Insert verbose messages throughout your script. Adding messages helps you troubleshoot errors as they arise. Verbose messages can also serve as internal documentation. 
+
+You can even add a prefix to each verbose message to indicate what script block is being called. 
+```
+Function TryMe {
+[cmdletbinding()]
+Param(
+[string]$Computername
+)
+
+Begin {
+    Write-Verbose "[BEGIN  ] Starting: $($MyInvocation.Mycommand)"
+    Write-Verbose "[BEGIN  ] Initializing array"
+    $a = @()
+
+} #begin
+
+Process {
+    Write-Verbose "[PROCESS] Processing $Computername"
+    # code goes here
+} #process
+
+End {
+    Write-Verbose "[END    ] Ending: $($MyInvocation.Mycommand)"
+
+} #end
+
+} #function
+```
+
+## Information Output
+Similar to verbose output, using the Information channel requires planning. 
+You need to determine what needs to be logged and how it might be used. 
+
+Here is an example of recording variables using an information variable
+```
+Function Test-Me {
+[cmdletbinding()]
+Param()
+
+Write-Information "Starting $($MyInvocation.MyCommand) " -Tags Process
+Write-Information "PSVersion = $($PSVersionTable.PSVersion)" -Tags Meta
+Write-Information "OS = $((Get-CimInstance Win32_operatingsystem).Caption)"'
+-Tags Meta
+
+Write-Verbose "Getting top 5 processes by WorkingSet"
+Get-process | sort WS -Descending | select -first 5 -OutVariable s
+
+Write-Information ($s[0] | Out-String) -Tags Data
+
+Write-Information "Ending $($MyInvocation.MyCommand) " -Tags Process
+
+}
+```
+
+If you run this with `test-me -InformationAction Continue` it will display each of the informational 
+actions and `test-me -InformationVariable inf` will store the output in an inf variable. 
+
+The variable storing information output also contains a range of actions. 
+For example run `$inf | gm`
+
+___
+
+# Manifests
+
+When powershell starts up, it enumerates all the folders listed in `$PSModulePath` environment variable to load modules.
+Every folder under this path is a potential module to be loaded. 
+
+PowerShell considers the following potential modules:
+
+- .psd1 file having the same filename as the module's folder name. This is a module manifest and tells the shell what else needs to be loaded.
+
+- .dll file having the same filename as the module's folder name. This is a compiled or binary module, usually written in C#.
+
+- .psm1 file having the same filename as the module's folder name. This is a script module.
+
+Script modules can be ineffecient since they require loading everytime the shell starts. If a manifest is specified it will greatly speed up load time.
+To create a manifest, you will first need a script module prepared. Run the following command:
+```
+New-ModuleManifest –Path <ModuleName>.psd1 –Root ./<ModuleName>.psm1
+```
+
+## Manifest Sections
+Some metadata or data about the module itself includes:
+
+- `ModuleVersion` Module version using the standard Microsoft w.x.y.z version notation. Mandatory if you submit modules to PowerShellGallery.com.
+- A globally unique identifier (GUID) is a requirement and is generated automatically.
+- Author;  Mandatory if you submit modules to PowerShellGallery.com.
+- Copyright and Description are optional, but you should include Description for PowerShellGallery submissions (it may become mandatory at some point).
+- `ModuleList` a list of all submodules that your module includes, i.e. the names of any .psm1 files. Does not perform any actions and is rarely seen
+- `FileList` is similar to ModuleList; A method to document all the files included in the module.
+
+## Supporting elements
+You can specify several supporting elements which are loaded and unloaded anlong with the module. Each of these elements is an array. 
+- ScriptsToProcess lists PowerShell scripts (.ps1 files) to be run before the module is loaded. 
+- TypesToProcess; a list of PowerShell Extensible Type System (ETS) extensions—usually .ps1xml files.
+- FormatsToProcess; a list of PowerShell formatting view files—usually .ps1xml files that your module needs to load. 
+Usually these items are placed in each supporting module's folder and specified using `./filename` in the array instead of loading the entire module. 
+
+## Exporting Members
+You can declare certain functions as being exported from the module, i.e. available. 
+Any functions which are not explicitly exported become private to the module and unavailable outside the module. 
+This is useful for creating internal helper modules.
+
+Five types of items can be exported:
+
+1. FunctionsToExport holds functions you want users to use.
+2. CmdletsToExport equivalent of FunctionsToExport when publishing a compiled module, not used in a script module.
+3. VariablesToExport holds module-level variables to add to the global scope. Good way to publish variables that set things like log filenames, database connection strings, and so on.
+4. AliasesToExport holds aliases you define in your module (using New-Alias)
+5. DscResourcesToExport is a special list related to building Desired State Configuration (DSC) resource modules.
+___
+
+# Scripting Tips
+The folllowing are some tips to improve your scripting.
+- Use Source Control. Source Control advantages include easier collaboration with teams, revisit earlier versions of your code, backup your code, share code and control community input. 
+- Spelling it Out. When sharing your script avoid aliases. Spell everything out fully. 
+- Use comments to explain your intention as you progress, not what a cmdlet does. `Write-Verbose` is used for explaining the progression of the script, not what an individual command does. 
+- Formatting. Focus on spacing for readability, keep hash tables tightly structured, and include comments for closing braces. Comment the end of constructs `{`.
+- Variable names should provide a clear idea of whats in them. Parameter variables should always be singular. Avoid Hungarian style variable naming, i.e. placing the data type in front of the variable name such as `strComputer="blah"`
+- Scripts are structured, permanent artifacts. In contrast, the console is best for one-off comands to get something done quickly and forget about it. Make sure your scripts are clearly structured. 
+- Learn how to use `PlatyPS` an open source project used by the powershell team to generate external, i.e. not comment-based help. 
+- Don't use `Write-Host` for output. Alternatives can be `Write-Information` to write to the information channel. If you need to show the command progress to the user, learn how to use the Write-Progress cmdlet instead of `Write-Host`.
+- Use single quotes to delmit strings. Double quotes are only needed to call variables or subexpressions inside the string. 
+For example:
+```
+$message = "The computer name is $computername"
+$message = "Yesterday was $( (Get-Date).AddDays(-1) )"
+```
+- Don't mess with the Global Scope; Do not push your own variables into the global scope. 
+- Maintain Flexiblity. Do not hardcode values. Use Parameters.
+- Never hardcode credentials into your code. No usernames. API keys. Plaintext passwords, etc. Learn how to use the [pscredentials] object as a parameter.
+
+___
+
+# Testubg
+
+## Automated Unit Tests
+A general process to follow is:
+1. Write some code or modify code
+2. Check the code into source control
+3. Repo triggers a continous integration pipeline. 
+4. The pipeline builds out a vm to test your script. The pipeline copies the script into a vm and runs several tests. 
+5. If any tests fail, you get an email with the details.
+6. If the tests pass, code is deployed to a repository, making it available for production useage. 
+
+## Problems with Manual Testing
+Manual testing has several issues. These include:
+1. Cannot cover every possible situation with manual testing. 
+2. Time-consuming. Manual testing takes time and effort. 
+3. Manual testing does not auto-change or adapt itself. 
+
+## Benefits of Automated Testing
+Benefits of automated testing includes:
+1. Automated testing is automatic.
+2. Can adapt and learn your code. 
+3. Supports TDD, Test Driven Development i.e. designing and writing tests to test your code before actually scripting the code. 
+
+## Pester
+Open source project that is bundled with Windows 10. An automated unit-testing framework for powershell. 
+The coder writes baseic tests in pester, then pester runs the tests for you. Microsoft uses pester to automate the testing of its own Powershell project.  
+Pester Website: [https://pester.dev/](https://pester.dev/)
+Pester help file: `about_pester`
+
+## Coding to be tested
+To successful use pester or code testing, focus on building self-contained, single-task modular tools. Tools which perfom several different activities are difficult to test. 
+
+Pester is only a powershell testing framework. It does not handle .NET, COM or other stuff. 
+
+## Testing Scenarios
+
+### Integration Tests
+Focuses on testing the end state and results of your command. 
+If you write a command to create a VM, it tests if this was successful. 
+Integration tests do not focus on what is happening inside the code, rather if the goal itself was achieved. 
+
+### Unit Tests
+Unit tests are more granular. These tests are designed to check the internal working of the code and logic to ensure the code runs. 
+The end goal of the script is not the main concern of the unit test. 
+
+___
+
+# Signing your Script
+
+## Why?
+Signing a script authenticates the person who wrote it. This does not mean the script is safe to run. Script signing also allows for the verification of code integrity, confirming the script content has not been changed.
+
+## Certificates
+Signing your script requires certificate generation. 
+
+The purpose of a cert is identity. Certificates are issued by Certificate Authorities to validate identities. Your identity is embedded in your Certificate. 
+
+If your code is internal to your organizaition, you may have internal PKI infrastructure and be running your own internal CA. This will alllow internal code signing. A commercial CA or internal PKI is essential for deploying code, either internally or externally. 
+
+Self-signed certificates can also be generated. These certs are only useful when you are running code yourself on a computer under your control. 
+
+Certificates consist of PKI key pairs. Public and private keys. Your private key is kept safe, not shared and used to generate a hash of your code. The public key is shared and can be used to verify this hash. 
+
+## Setting Execution Policy
+The first step to test script signing requires configuring your command to require signed scripts. Run the following from an Admin elevated prompt:
+```
+Set-Executionpolicy AllSigned -force
+```
+
+## Code Signing Basics
+Certificates issued by a CA must support Microsoft's Authenticode extension. 
+The certificate must also be issued by a CA that is trusted by your computer. 
+If you have an AD Domain in your organisation, they will likely be using Active Directory Certificate Services to issue code signing certificates. 
+
+To create a self-signed certificate, you will need powershell's Remote Server Administration Tools. This will allow you to run the following:
+```
+New-SelfSignedCertificate -type CodeSigningCert -Subject "CN=Art
+ Deco" -CertStoreLocation Cert:\CurrentUser\My\ -testroot
+```
+After creating the cert, powershell will throw an "unkown error" message since it cannot yet verify the certificate chain. The certificate creation can then be verified by checking:
+```
+dir Cert:\CurrentUser\My\ -CodeSigningCert
+```
+In code signing, a certificate's thumbprint refers to its official, unique name. 
+To fully issue a self-signed certificate on a windows computer you will also need to add the certificate in the certificate manager snap-in, i.e. `Certmgr.msc`. 
+
+Sign a script by performing the following:
+```
+$cert = dir Cert:\CurrentUser\My\ -CodeSigningCert
+Set-Alias -Name sign -Value Set-AuthenticodeSignature
+sign .\psvm.ps1 -Certificate $cert
+```
+Note the creation of the alias in line 2. Once this is done, the code signing will add a signature block to your code. In powershell, you can sign .ps1, .psm1, and .ps1xml files.
+
+# Testing script signatures.
+The following command can be used to test and verify a script's signature:
+```
+Get-AuthenticodeSignature .\psvm.ps1
+```
+
+___
+
+# Publishing 
+
+## Requirements
+Publishing a scripts allows you to share your script with others and track your older versions. 
+
+Before you publish consider: Does this functionality already exist? Check the Powershell Gallery to make sure you are not doubling up here.
+
+Before publishing you will need to update your manifest. 
+
+The following settings are required in a manifest before publishing:
+1. ModuleVersion
+2. Author
+3. Description
+4. PrivateData: Tags, LicenseUri - link to a url to your license file
+5. ProjectUri - The URL of the github repo or location of your module
+
+You will also need to apply for a powershell gallery API key before publishing. 
+Here is a sample command for publishing a script
+```
+Publish-Module -path <PATH> -repository PSGallery -nugetapikey $api_key
+```
+
+Scripts can also be published. Before publishing a script, you will need to create a special type of header that includes all the required tags, versioning and metadata. This is done with the `New-ScriptFileInfo` cmdlet.
+
+Once the proper script requirements are in place, the script can be published to the powershell gallery using an API key:
+```
+Publish-Script -Path C:\scripts\Check-ModuleUpdate.ps1 -NuGetApiKey
+ $psgallerykey -Repository PSGallery
+```
+
+## Searching the gallery
+You can search the powershell gallery for commands or by tags. For example:
+```
+find-module *scan* | Select Version,Name,Author, Description,PublishedDate
+find-script *scan* | Select Version,Name,Author, Description,PublishedDate | Format-Table
+```
+Search by tags
+```
+find-module -tag ad,activedirectory
+```
+___
+
+# Debugging
+
+## Types of bugs
+Here are 3 types of categories of bugs.
+
+1. Syntax bugs: You typed something wrong. Misstyped variables can be particularly difficult to detect.
+
+2. Results Bugs: A command produces results you do not expect.
+
+3. Logic Bugs: The commands run without an explicit error, but an issue with the way your code is written causes an error.
+
+## Dealing with Syntax Bugs
+Setting strict mode can help handle bugs. This can be done by typing at top of the begin or other block in a function:
+```
+Set-StrictMode –Version 2.0
+```
+Strict mode throws errors when referring to non-existent variables and enforces strict syntax when calling functions. This prevents many user-caused errors. 
+
+## Breakpoints
+Allow you to run a script and pause at a specific place. This pause allows you to examine the script, check the contents of variables/properties and even proceed to run the script line by line. 
+
+Setting breakpoints and debuggins requires having a strong idea about what your script is supposed to do -- and where it might need to be fixed. 
+
+## Setting Watches
+Once a breakpoint is set and debugging has started, you can set variables to "Watch" in the left column. By adding a variable with a `+` you can watch the variable change between breakpoints. 
 
 ## Powershell Commands
 
@@ -666,22 +1467,23 @@ ___
 | `Get-Job` | Retrieves all  jobs |
 | `Receive-Job -Id 1` | Retrieves the results of job id 1 |
 | `Receive-Job -Id 1 -Keep` | Retrieves the results of job id 1 and keeps the results cached |
-|`Get-Job -Id 4 | Select-Object -ExpandProperty ChildJobs`| List all the child jobs of a given job |
+|`Get-Job -Id 4 \| Select-Object -ExpandProperty ChildJobs` | List all the child jobs of a given job |
 | `Stop-Job` | Terminates the job. Results generated up to this point can be retrieved |
 | `Remove-Job` | Deletes a job and any output still cached within from memory |
 | `Wait-Job` | Forces the shell to stop and wait until the job (or jobs) is completed |
-|`Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration`| Get all network adapters |
-| `Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration | Invoke-CimMethod -MethodName ReleaseDHCPLease` | Invoke a cim method to release DHCP lease |
+|`Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration` | Get all network adapters |
+| `Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration \| Invoke-CimMethod -MethodName ReleaseDHCPLease` | Invoke a cim method to release DHCP lease |
 |`$db_servers = New-PSSession -ComputerName db01, db02, db03 -Credential DbAdmin`| Create multiple sessions in a variable|
 |`Invoke-Command -ComputerName { Get-Process } -Session (Get-PSSession -ComputerName db01, db02, db03)`| Run multiple commands on serveral computers with active sessions at once |
 | `Write-Verbose "Connecting to hyperdrive >>>"` | Add the optional verbose output which be viewed by adding the -verbose switch to a command |
 |`$pshome`| Built in variable which contains the install folder of Powershell |
 |`$home`| Built in variable pointing to the current user's profile folder |
-|`$Profile | Format-List -force`| List all current profiles|
+|`$Profile \| Format-List -force`| List all current profiles|
 |`"String" \| get-member`| List all the vailable string manipulation methods|
 |`$username = "  Gandalf   " $username.trim()`| Trims all whitespace|
 |`$username.TrimStart()`|Trims whitespace at the start|
 |`$username.TrimEnd()`|Trims whitespace at the end|
-|`get-date | get-member`| List all the available date manipulation methods |
+|`get-date \| get-member`| List all the available date manipulation methods |
 |`Get-Date`| List today's date|
 |`(Get-Date).Day`| List the day |
+|`Help Convertto-html -ShowWindow`| Display a window for a given help command|
